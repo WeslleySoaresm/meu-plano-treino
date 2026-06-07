@@ -1,5 +1,5 @@
-# Estágio 1: Build de todas as camadas
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build-env
+# Estágio 1: Build de todas as camadas usando o SDK do .NET 9.0
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build-env
 WORKDIR /app
 
 # Copia os arquivos de configuração de todas as camadas para restaurar as dependências
@@ -17,8 +17,8 @@ COPY . ./
 # Compila e publica o projeto a partir da pasta Controllers
 RUN dotnet publish Controllers/Controllers.csproj -c Release -o out
 
-# Estágio 2: Criação da imagem de execução leve
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
+# Estágio 2: Criação da imagem de execução leve usando o Runtime do .NET 9.0
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
 WORKDIR /app
 COPY --from=build-env /app/out .
 
