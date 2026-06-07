@@ -2,11 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Domain.entities;
 using Infrastructure.Data;
-using System;
-using System.Threading.Tasks;
-using System.Collections.Generic;
 
-namespace Controllers
+namespace YourProject.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -21,73 +18,88 @@ namespace Controllers
         }
 
         /// <summary>
-        /// Registra uma nova execução de treino (métrica de desempenho / Garmin).
+        /// Grava o histórico real de execução de um treino (Ação: Confirmar e Salvar Registro).
         /// </summary>
-        [HttpPost]
+        /// <response code="201">Histórico gravado com sucesso no banco de dados.</response>
+        /// <response code="400">Se o plano associado não for encontrado.</response>
+        [HttpPost("record")]
         [ProducesResponseType(typeof(TrainingData), 201)]
         [ProducesResponseType(400)]
-        public async Task<IActionResult> Create([FromBody] TrainingData trainingData)
+        public async Task<IActionResult> SaveWorkoutRecord([FromBody] TrainingRecordDto dto)
         {
-            var planeExists = await _context.Planes.AnyAsync(p => p.Id == trainingData.PlaneId);
-            
+            var planeExists = await _context.Planes.AnyAsync(p => p.Id == dto.PlaneId);
             if (!planeExists)
             {
-                return BadRequest(new { message = "Não é possível registrar um treino para um plano inexistente." });
+                return BadRequest(new { message = "Plano de treino associado não existe." });
             }
 
-            _context.TrainingRecords.Add(trainingData); 
+            // Instancia a Entidade mapeando os dados com base no tipo de treino vindo do front
+            var newRecord = new TrainingData
+            {
+                Id = Guid.NewGuid(),
+                PlaneId = dto.PlaneId,
+                DateTrained = DateTime.UtcNow,
+                Notes = dto.Notes,
+                NotesOfPerformance = $"Registrado para o dia: {dto.DayName} - {dto.Title}"
+            };
+
+            if (dto.IsCardio)
+            {
+                // Trata as métricas genéricas como dados de Corrida
+                newRecord.Speed = float.TryParse(dto.Metric1, out var speed) ? speed : 0; // Ex: Interpretado via Pace ou Velocidade
+                newRecord.FrequencyCardiac = int.TryParse(dto.Metric2, out var fcMed) ? fcMed : 0;
+                // Armazena a FC Máxima (Metric3) concatenada ou em campo customizado se necessário
+            }
+            else
+            {
+                // Trata as métricas genéricas como dados de Força
+                newRecord.WeightUsed = float.TryParse(dto.Metric1, out var weight) ? weight : 0;
+                newRecord.Repetitions = int.TryParse(dto.Metric2, out var reps) ? reps : 0;
+            }
+
+            _context.TrainingRecords.Add(newRecord);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetById), new { id = trainingData.Id }, trainingData);
+            return CreatedAtAction(nameof(SaveWorkoutRecord), new { id = newRecord.Id }, newRecord);
         }
 
         /// <summary>
-        /// 🔥 ROTA GET: Lista TODOS os registros de treinamento de todos os alunos.
+        /// Deleta o registro de execução do banco de dados (Ação: Confirmar Exclusão no Alerta).
         /// </summary>
-        [HttpGet]
-        [ProducesResponseType(typeof(IEnumerable<TrainingData>), 200)]
-        public async Task<IActionResult> GetAll()
-        {
-            // Busca todos os treinos do banco organizados do mais recente para o mais antigo
-            var records = await _context.TrainingRecords
-                .OrderByDescending(t => t.DateTrained)
-                .ToListAsync();
-
-            return Ok(records);
-        }
-
-        /// <summary>
-        /// ROTA GET por ID: Busca um único registro de treino específico.
-        /// </summary>
-        [HttpGet("{id}")]
-        [ProducesResponseType(typeof(TrainingData), 200)]
+        /// <param name="id">ID Único (GUID) do registro a ser apagado.</param>
+        /// <response code="204">Registro removido com sucesso.</response>
+        /// <response code="404">Se o registro não for encontrado.</response>
+        [HttpDelete("record/{id:guid}")]
+        [ProducesResponseType(204)]
         [ProducesResponseType(404)]
-        public async Task<IActionResult> GetById(Guid id)
+        public async Task<IActionResult> ClearRecord(Guid id)
         {
-            var trainingData = await _context.TrainingRecords
-                .FirstOrDefaultAsync(t => t.Id == id);
-
-            if (trainingData == null)
+            var record = await _context.TrainingRecords.FindAsync(id);
+            if (record == null)
             {
                 return NotFound(new { message = "Registro de treinamento não encontrado." });
             }
 
-            return Ok(trainingData);
-        }
+            _context.TrainingRecords.Remove(record);
+            await _context.SaveChangesAsync();
 
-        /// <summary>
-        /// ROTA GET por Plano: Lista todos os treinos de um plano específico (Útil para o histórico do aluno).
-        /// </summary>
-        [HttpGet("by-plane/{planeId}")]
-        [ProducesResponseType(typeof(IEnumerable<TrainingData>), 200)]
-        public async Task<IActionResult> GetByPlane(Guid planeId)
-        {
-            var records = await _context.TrainingRecords
-                .Where(t => t.PlaneId == planeId)
-                .OrderByDescending(t => t.DateTrained)
-                .ToListAsync();
-
-            return Ok(records);
+            return NoContent();
         }
+    }
+
+    /// <summary>
+    /// Objeto de Transferência de Dados (DTO) para alinhar as propriedades dinâmicas do React com a API.
+    /// </summary>
+    public class TrainingRecordDto
+    {
+        public Guid PlaneId { get; set; }
+        public string DayId { get; set; }
+        public string DayName { get; set; }
+        public string Title { get; set; }
+        public bool IsCardio { get; set; }
+        public string Metric1 { get; set; } // val1 do front
+        public string Metric2 { get; set; } // val2 do front
+        public string Metric3 { get; set; } // val3 do front
+        public string Notes { get; set; }
     }
 }
