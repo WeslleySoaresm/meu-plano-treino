@@ -20,19 +20,16 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 
-// 🔓 CORREÇÃO 1: Configuração do CORS (Libera o React para acessar a API)
+// Configuração do CORS (Libera o React para acessar a API)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReact", policy =>
     {
-        policy.AllowAnyOrigin()   // Permite requisições de qualquer lugar (útil no desenvolvimento)
+        policy.AllowAnyOrigin()   // Permite requisições de qualquer lugar (útil no desenvolvimento/Render)
               .AllowAnyMethod()   // Permite GET, POST, PUT, DELETE
               .AllowAnyHeader();  // Permite qualquer cabeçalho HTTP
     });
 });
-
-
-
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -69,7 +66,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<AppDbContext>();
-        await context.Database.MigrateAsync(); 
+        // Executa a migração de forma síncrona ou aguarda a task corretamente no escopo principal
+        context.Database.Migrate(); 
     }
     catch (Exception ex)
     {
@@ -77,21 +75,18 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Ativa o Swagger em ambiente de desenvolvimento
-if (app.Environment.IsDevelopment())
+// 🔓 CORREÇÃO PARA PRODUÇÃO: Swagger ativado globalmente (removido o IF de Development)
+app.UseSwagger();
+app.UseSwaggerUI(options =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "API v1");
-    });
-}
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "API v1");
+    options.RoutePrefix = "swagger"; // Define a rota /swagger explicitamente
+});
 
-// 🔓 CORREÇÃO 1 (Parte 2): Ativa o Middleware do CORS antes dos outros mapeamentos
+// Ativa o Middleware do CORS antes dos outros mapeamentos importantes
 app.UseCors("AllowReact");
 
 app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
-
