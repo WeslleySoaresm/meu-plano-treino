@@ -19,7 +19,7 @@ namespace Controllers
             _context = context;
         }
 
-        [HttpPost]
+        [HttpPost("registrar")]
         public async Task<IActionResult> Create([FromBody] CreatePersonDto dto)
         {
             // 1. Criamos a entidade Person raiz
