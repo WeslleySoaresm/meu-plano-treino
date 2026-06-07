@@ -32,7 +32,7 @@ builder.Services.AddCors(options =>
 });
 
 // CORREÇÃO 2: Configura a API para escutar tanto em HTTP (5000) quanto em HTTPS (7001) para bater com o seu React
-builder.WebHost.UseUrls("http://localhost:5000", "https://localhost:7001");
+builder.WebHost.UseUrls("http://localhost:5000");
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -94,3 +94,4 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+

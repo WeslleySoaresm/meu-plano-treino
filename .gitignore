@@ -34,3 +34,4 @@ appsettings.Development.json
 
 # Permitir que apenas o exemplo suba para o GitHub
 !appsettings.Example.json
+.env
