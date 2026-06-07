@@ -1,0 +1,15 @@
+/Users/weslleysoares/meu-plano-treino/Domain/bin/Debug/net9.0/Domain.deps.json
+/Users/weslleysoares/meu-plano-treino/Domain/bin/Debug/net9.0/Domain.runtimeconfig.json
+/Users/weslleysoares/meu-plano-treino/Domain/bin/Debug/net9.0/Domain.dll
+/Users/weslleysoares/meu-plano-treino/Domain/bin/Debug/net9.0/Domain.pdb
+/Users/weslleysoares/meu-plano-treino/Domain/obj/Debug/net9.0/Domain.csproj.AssemblyReference.cache
+/Users/weslleysoares/meu-plano-treino/Domain/obj/Debug/net9.0/Domain.GeneratedMSBuildEditorConfig.editorconfig
+/Users/weslleysoares/meu-plano-treino/Domain/obj/Debug/net9.0/Domain.AssemblyInfoInputs.cache
+/Users/weslleysoares/meu-plano-treino/Domain/obj/Debug/net9.0/Domain.AssemblyInfo.cs
+/Users/weslleysoares/meu-plano-treino/Domain/obj/Debug/net9.0/Domain.csproj.CoreCompileInputs.cache
+/Users/weslleysoares/meu-plano-treino/Domain/obj/Debug/net9.0/Domain.sourcelink.json
+/Users/weslleysoares/meu-plano-treino/Domain/obj/Debug/net9.0/Domain.dll
+/Users/weslleysoares/meu-plano-treino/Domain/obj/Debug/net9.0/refint/Domain.dll
+/Users/weslleysoares/meu-plano-treino/Domain/obj/Debug/net9.0/Domain.pdb
+/Users/weslleysoares/meu-plano-treino/Domain/obj/Debug/net9.0/Domain.genruntimeconfig.cache
+/Users/weslleysoares/meu-plano-treino/Domain/obj/Debug/net9.0/ref/Domain.dll

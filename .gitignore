@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.Domain
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +23,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.Domain
+.Model
+
+
+
+# Bloquear arquivos com configurações locais e senhas
+appsettings.json
+appsettings.Development.json
+
+# Permitir que apenas o exemplo suba para o GitHub
+!appsettings.Example.json

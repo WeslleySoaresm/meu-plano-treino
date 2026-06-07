@@ -1,0 +1,12 @@
+/Users/weslleysoares/meu-plano-treino/Dtos/bin/Debug/net9.0/Dtos.deps.json
+/Users/weslleysoares/meu-plano-treino/Dtos/bin/Debug/net9.0/Dtos.dll
+/Users/weslleysoares/meu-plano-treino/Dtos/bin/Debug/net9.0/Dtos.pdb
+/Users/weslleysoares/meu-plano-treino/Dtos/obj/Debug/net9.0/Dtos.GeneratedMSBuildEditorConfig.editorconfig
+/Users/weslleysoares/meu-plano-treino/Dtos/obj/Debug/net9.0/Dtos.AssemblyInfoInputs.cache
+/Users/weslleysoares/meu-plano-treino/Dtos/obj/Debug/net9.0/Dtos.AssemblyInfo.cs
+/Users/weslleysoares/meu-plano-treino/Dtos/obj/Debug/net9.0/Dtos.csproj.CoreCompileInputs.cache
+/Users/weslleysoares/meu-plano-treino/Dtos/obj/Debug/net9.0/Dtos.sourcelink.json
+/Users/weslleysoares/meu-plano-treino/Dtos/obj/Debug/net9.0/Dtos.dll
+/Users/weslleysoares/meu-plano-treino/Dtos/obj/Debug/net9.0/refint/Dtos.dll
+/Users/weslleysoares/meu-plano-treino/Dtos/obj/Debug/net9.0/Dtos.pdb
+/Users/weslleysoares/meu-plano-treino/Dtos/obj/Debug/net9.0/ref/Dtos.dll
