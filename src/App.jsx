@@ -24,16 +24,16 @@ export default function App() {
   const [editFields, setEditFields] = useState({});
   const [inputs, setInputs] = useState({});
 
-  // 🔐 FUNÇÃO DE LOGIN (Integração com a API)
+  /// 🔐 FUNÇÃO DE LOGIN (Integração com a API Corrigida)
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!loginEmail || !loginPassword) return;
 
     setLoading(true);
     try {
-      // Em produção, você faria um POST para api/auth/login. 
-      // Aqui vamos buscar o usuário pelo email para carregar seu plano correspondente.
-      const response = await fetch(`${API_BASE_URL}/person`);
+      // 🎯 ALTERADO: Mudamos de '/person' para '/usuario' que é onde o .NET listará os usuários cadastrados
+      const response = await fetch(`${API_BASE_URL}/usuario`);
+      
       if (response.ok) {
         const users = await response.json();
         const userFound = users.find(u => u.email.toLowerCase() === loginEmail.toLowerCase());
@@ -41,16 +41,20 @@ export default function App() {
         if (userFound) {
           setCurrentUser(userFound);
           setIsAuthenticated(true);
+          
           // Se o usuário tem planos, carrega o primeiro plano dele
           if (userFound.planes && userFound.planes.length > 0) {
             setPlaneId(userFound.planes[0].id);
             fetchPlaneStructure(userFound.planes[0].id);
           } else {
-            alert("Usuário autenticado, mas nenhum plano de treino foi associado a ele no banco.");
+            // 💡 Se der esse alerta, significa que logou, mas precisamos criar um plano para você no banco
+            alert("Usuário autenticado! Porém, nenhum plano de treino foi associado a ele no banco ainda.");
           }
         } else {
           alert("Usuário não encontrado no banco de dados. Verifique o e-mail.");
         }
+      } else {
+        alert("Erro ao consultar a lista de usuários no servidor.");
       }
     } catch (error) {
       console.error("Erro ao realizar login:", error);

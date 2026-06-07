@@ -135,5 +135,16 @@ namespace Controllers
             if (person == null) return NotFound();
             return Ok(person);
         }
+        
+        [HttpGet("ListarTodos")]
+        public async Task<IActionResult> ListarTodos()
+        {
+            var usuarios = await _context.Usuarios.Include(u => u.Planes).ToListAsync();
+            return Ok(usuarios);
+        }
+            
     }
+
+
+
 }
