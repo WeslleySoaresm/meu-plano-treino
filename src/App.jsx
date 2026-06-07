@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 // Substitua a linha antiga por esta:
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = 'https://meu-plano-treino.onrender.com';
 // URL base da sua API .NET (Ajuste a porta conforme o seu projeto local)
 
 
