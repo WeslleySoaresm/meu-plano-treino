@@ -14,23 +14,31 @@ var builder = WebApplication.CreateBuilder(args);
 // 1. CONFIGURAÇÃO DOS SERVIÇOS (CONTAINER)
 // ==========================================
 
-// CORREÇÃO: Mapeia os controladores e impede o loop infinito de referências circulares no JSON
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 
-builder.WebHost.UseUrls("http://localhost:5000");
+// 🔓 CORREÇÃO 1: Configuração do CORS (Libera o React para acessar a API)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowReact", policy =>
+    {
+        policy.AllowAnyOrigin()   // Permite requisições de qualquer lugar (útil no desenvolvimento)
+              .AllowAnyMethod()   // Permite GET, POST, PUT, DELETE
+              .AllowAnyHeader();  // Permite qualquer cabeçalho HTTP
+    });
+});
 
-// Puxa a string de conexão do PostgreSQL que colocamos no appsettings.json
+// CORREÇÃO 2: Configura a API para escutar tanto em HTTP (5000) quanto em HTTPS (7001) para bater com o seu React
+builder.WebHost.UseUrls("http://localhost:5000", "https://localhost:7001");
+
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-// Configura o Banco de Dados para usar o PostgreSQL real
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// Configura o motor de documentação do Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -41,7 +49,6 @@ builder.Services.AddSwaggerGen(options =>
         Description = "Backend em .NET para gerenciamento e registro de planilhas de corrida e força sincronizadas com o Garmin."
     });
 
-    // Lê os comentários de três barras (///) dos controladores para exibir no Swagger
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
     if (File.Exists(xmlPath))
@@ -55,7 +62,7 @@ builder.Services.AddSwaggerGen(options =>
 // ==========================================
 var app = builder.Build();
 
-// AJUSTE: Aplica as migrations automaticamente na inicialização da API
+// Aplica as migrations automaticamente na inicialização da API
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -70,7 +77,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Ativa o Swagger se o projeto estiver rodando em ambiente de desenvolvimento
+// Ativa o Swagger em ambiente de desenvolvimento
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -80,11 +87,10 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// Configurações básicas de segurança e roteamento
-app.UseAuthorization();
+// 🔓 CORREÇÃO 1 (Parte 2): Ativa o Middleware do CORS antes dos outros mapeamentos
+app.UseCors("AllowReact");
 
-// Mapeia as rotas dos nossos controladores para que fiquem acessíveis por URLs
+app.UseAuthorization();
 app.MapControllers();
 
-// Liga o servidor e faz a API começar a escutar as requisições
 app.Run();
