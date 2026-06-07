@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 // URL base da sua API .NET (Ajuste a porta conforme o seu projeto local)
-const API_BASE_URL = 'https://localhost:7001/api';
+const API_BASE_URL = 'https://localhost:5000/api';
 
 export default function App() {
   // Estados de Autenticação
