@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 // Substitua a linha antiga por esta:
-const API_BASE_URL = 'https://meu-plano-treino.onrender.com';
+const API_BASE_URL = 'https://meu-plano-treino.onrender.com/api';
 // URL base da sua API .NET (Ajuste a porta conforme o seu projeto local)
 
 
