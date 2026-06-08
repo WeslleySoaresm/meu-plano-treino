@@ -106,7 +106,7 @@ export default function App() {
           };
         });
 
-        // Mapeia históricos ativos usando o dayId para indexar perfeitamente no front
+        // Mapeia históricos ativos usando o dayId para indexar no front
         if (data.training && data.training.length > 0) {
           data.training.forEach(t => {
             const keyId = t.dayId || t.id;
@@ -114,9 +114,9 @@ export default function App() {
               initialRecords[keyId] = {
                 id: t.id,
                 isCardio: t.caloriesBurned > 0 || t.distanceCovered > 0 || (t.averagePace && t.averagePace !== "00:00:00"),
-                metric1: t.weightUsed > 0 ? t.weightUsed : t.averagePace,
-                metric2: t.sets > 0 ? `${t.sets} séries` : `${t.frequencyCardiac} bpm`,
-                metric3: t.distanceCovered > 0 ? `${t.distanceCovered} km` : t.notesOfPerformance,
+                metric1: t.metric1 || t.weightUsed || t.averagePace,
+                metric2: t.metric2 || `${t.sets} séries`,
+                metric3: t.metric3 || `${t.distanceCovered} km`,
                 notes: t.notes,
                 timestamp: new Date(t.dateTrained).toLocaleDateString('pt-BR')
               };
@@ -135,7 +135,7 @@ export default function App() {
   };
 
   // ==========================================
-  // 💾 PERSISTÊNCIA DE PRODUÇÃO DE TREINO (POST)
+  // MODIFICAÇÃO 1: 💾 SALVAR REGISTRO (POST CORRIGIDO CONTRA ERRO 400)
   // ==========================================
   const handleSaveRecord = async (dayGuidId, dayName, title, isCardio) => {
     const currentInput = inputs[dayGuidId] || { val1: '', val2: '', val3: '', notes: '' };
@@ -148,25 +148,27 @@ export default function App() {
       }
     } catch (e) {}
 
-    // Tipagem estrita e sanitização para afastar o Erro 400 (Bad Request) do .NET
+    // DTO sanitizado com as propriedades exatas e obrigatórias exigidas pela validação do .NET
     const payload = {
       id: generatedId,
       dateTrained: new Date().toISOString(),
-      repetitions: !isCardio ? parseInt(currentInput.val2, 10) || 0 : 0,
-      weightUsed: !isCardio ? parseFloat(currentInput.val1.replace(',', '.')) || 0 : 0,
-      duration: isCardio ? currentInput.val1 : "00:00:00", 
-      restTime: "00:01:00",
-      sets: !isCardio ? parseInt(currentInput.val3, 10) || 0 : 0,
+      title: title || "Sessão de Treino",
+      dayName: dayName || "Dia",
+      metric1: currentInput.val1 || "0",
+      metric2: currentInput.val2 || "0",
+      metric3: currentInput.val3 || "0",
       notes: currentInput.notes || "",
-      frequencyCardiac: isCardio ? parseInt(currentInput.val2, 10) || 0 : 0,
-      caloriesBurned: isCardio ? 100.0 : 0.0,
-      distanceCovered: isCardio ? parseFloat(currentInput.val3.replace(',', '.')) || 0 : 0,
-      speed: 0,
-      power: 0,
-      averagePace: isCardio ? currentInput.val1 : "00:00:00",
       notesOfPerformance: currentInput.notes || "",
       personId: currentUser.id,
-      dayId: dayGuidId
+      dayId: dayGuidId,
+      // Retrocompatibilidade caso mapeamentos legados persistam
+      repetitions: !isCardio ? parseInt(currentInput.val2, 10) || 0 : 0,
+      weightUsed: !isCardio ? parseFloat(currentInput.val1.replace(',', '.')) || 0 : 0,
+      duration: isCardio ? currentInput.val1 : "00:00:00",
+      sets: !isCardio ? parseInt(currentInput.val3, 10) || 0 : 0,
+      frequencyCardiac: isCardio ? parseInt(currentInput.val2, 10) || 0 : 0,
+      distanceCovered: isCardio ? parseFloat(currentInput.val3.replace(',', '.')) || 0 : 0,
+      averagePace: isCardio ? currentInput.val1 : "00:00:00"
     };
 
     try {
@@ -201,11 +203,11 @@ export default function App() {
         setOpenForms(prev => ({ ...prev, [dayGuidId]: false }));
       } else {
         const errText = await response.text();
-        console.error("Payload rejeitado pelo backend (400):", errText);
-        alert("Erro 400: Dados incompatíveis com a tabela do banco de dados C#.");
+        console.error("Payload rejeitado pelo backend:", errText);
+        alert("Erro de Validação: Verifique a formatação dos campos de envio.");
       }
     } catch (error) {
-      console.error("Erro na requisição POST:", error);
+      console.error("Erro na requisição POST do histórico:", error);
     }
   };
 
@@ -236,7 +238,7 @@ export default function App() {
   };
 
   // ==========================================
-  // ⚙️ MUTABILIDADE DA MALHA METODOLÓGICA (POST)
+  // MODIFICAÇÃO 2: ⚙️ ATUALIZAÇÃO DA ESTRUTURA (MUDADO PARA POST CONFORME PIPELINE)
   // ==========================================
   const saveStructureEdition = async (dayGuidId) => {
     const edited = editFields[dayGuidId];
@@ -253,7 +255,7 @@ export default function App() {
     };
 
     try {
-      // Modificado para POST para contornar a ausência do PUT no pipeline do middleware .NET
+      // Modificado de PUT para POST baseado na rejeição de rotas identificada nos logs
       const response = await fetch(`${API_BASE_URL}/plane/days/${dayGuidId}`, {
         method: 'POST', 
         headers: { 
@@ -266,8 +268,7 @@ export default function App() {
       if (response.ok) {
         applyLocalEditionUpdate(dayGuidId, edited);
       } else {
-        // Fallback secundário na rota base sem o parâmetro limpo na URL
-        console.warn("POST com ID falhou. Tentando rota alternativa limpa...");
+        console.warn("POST com ID falhou. Disparando contingência na rota base limpa...");
         const fallbackResponse = await fetch(`${API_BASE_URL}/plane/days`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -277,11 +278,11 @@ export default function App() {
         if (fallbackResponse.ok) {
           applyLocalEditionUpdate(dayGuidId, edited);
         } else {
-          alert(`Erro na sincronização: O servidor retornou status ${response.status}. Verifique as anotações do seu Controller.`);
+          alert(`Erro na sincronização: O servidor retornou status ${response.status}. Verifique as diretivas de verbos do Controller.`);
         }
       }
     } catch (error) {
-      console.error("Erro na requisição de atualização da estrutura:", error);
+      console.error("Erro crítico na requisição de atualização estrutural:", error);
     }
   };
 
@@ -564,7 +565,7 @@ export default function App() {
                     </div>
                   </>
                 ) : (
-                  /* MÓDULO ADMINISTRATIVO (MUDADO PARA OPERAR VIA POST CONFORME LOGS) */
+                  /* MÓDULO ADMINISTRATIVO (POST) */
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                       <span className="text-xs font-black text-amber-400 uppercase tracking-wider">🛠️ Modificar Malha Estrutural do Dia</span>
@@ -617,7 +618,7 @@ export default function App() {
                     {savedRecord.isCardio ? (
                       <p className="font-medium">Tempo/Ritmo: <span className="font-mono font-bold text-white">{savedRecord.metric1}</span> | Frequência Cardíaca: <span className="font-mono text-white">{savedRecord.metric2}</span> | Distância Concluída: <span className="text-white font-bold">{savedRecord.metric3}</span></p>
                     ) : (
-                      <p className="font-medium">Sobrecarga Aplicada: <span className="text-white font-bold">{savedRecord.metric1} kg</span> | Volume/Repetições: <span className="text-white">{savedRecord.metric2}</span> | Séries Totais: <span className="text-white font-bold">{savedRecord.metric3}</span></p>
+                      <p className="font-medium">Sobrecarga Aplicada: <span className="text-white font-bold">{savedRecord.metric1}</span> | Volume/Repetições: <span className="text-white">{savedRecord.metric2}</span> | Séries Totais: <span className="text-white font-bold">{savedRecord.metric3}</span></p>
                     )}
                     {savedRecord.notes && <p className="text-zinc-400 border-t border-zinc-800/60 pt-2 mt-2 italic">"{savedRecord.notes}"</p>}
                     <button onClick={() => handleClearRecord(dayData.id)} className="absolute top-3 right-3 text-red-400/80 hover:text-white bg-red-950/30 border border-red-900/40 px-2 py-1 rounded-lg text-[9px] font-black transition">DELETAR</button>
