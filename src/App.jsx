@@ -106,18 +106,19 @@ export default function App() {
           };
         });
 
-        // Mapeia históricos ativos usando o dayId para indexar no front
+        // Mapeia históricos ativos baseados nas propriedades reais da sua classe C# TrainingData
         if (data.training && data.training.length > 0) {
           data.training.forEach(t => {
-            const keyId = t.dayId || t.id;
+            const keyId = t.dayId || t.id; 
             if (keyId) {
+              const isCardioTrack = t.distanceCovered > 0 || t.averagePace !== "00:00:00";
               initialRecords[keyId] = {
                 id: t.id,
-                isCardio: t.caloriesBurned > 0 || t.distanceCovered > 0 || (t.averagePace && t.averagePace !== "00:00:00"),
-                metric1: t.metric1 || t.weightUsed || t.averagePace,
-                metric2: t.metric2 || `${t.sets} séries`,
-                metric3: t.metric3 || `${t.distanceCovered} km`,
-                notes: t.notes,
+                isCardio: isCardioTrack,
+                metric1: isCardioTrack ? t.duration : t.weightUsed,
+                metric2: isCardioTrack ? t.frequencyCardiac : t.repetitions,
+                metric3: isCardioTrack ? t.distanceCovered : t.sets,
+                notes: t.notes || t.notesOfPerformance,
                 timestamp: new Date(t.dateTrained).toLocaleDateString('pt-BR')
               };
             }
@@ -135,40 +136,44 @@ export default function App() {
   };
 
   // ==========================================
-  // MODIFICAÇÃO 1: 💾 SALVAR REGISTRO (POST CORRIGIDO CONTRA ERRO 400)
+  // CORREÇÃO 1: 💾 POST SALVAR TREINO (FORTEMENTE TIPADO COM O C#)
   // ==========================================
   const handleSaveRecord = async (dayGuidId, dayName, title, isCardio) => {
     const currentInput = inputs[dayGuidId] || { val1: '', val2: '', val3: '', notes: '' };
     if (!currentInput.val1 && !currentInput.val2 && !currentInput.val3 && !currentInput.notes) return;
 
-    let generatedId = "00000000-0000-0000-0000-000000000000";
-    try {
-      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        generatedId = crypto.randomUUID();
+    // Helper para converter texto simples de minutos (Ex: "45" ou "45:00") para string de TimeSpan aceita pelo C#
+    const formatTimeSpan = (val) => {
+      if (!val) return "00:00:00";
+      if (val.includes(':')) {
+        const parts = val.split(':');
+        if (parts.length === 2) return `00:${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+        return val;
       }
-    } catch (e) {}
+      const num = parseInt(val, 10);
+      if (!isNaN(num)) return `00:${num.toString().padStart(2, '0')}:00`;
+      return "00:00:00";
+    };
 
-    // DTO sanitizado com as propriedades exatas e obrigatórias exigidas pela validação do .NET
+    // Payload estruturado exatamente igual à classe CreateTrainingDataDto / TrainingData do seu C#
     const payload = {
-      id: generatedId,
       dateTrained: new Date().toISOString(),
-      title: title || "Sessão de Treino",
-      dayName: dayName || "Dia",
-      metric1: currentInput.val1 || "0",
-      metric2: currentInput.val2 || "0",
-      metric3: currentInput.val3 || "0",
+      planeId: planeId,
       notes: currentInput.notes || "",
       notesOfPerformance: currentInput.notes || "",
-      personId: currentUser.id,
-      dayId: dayGuidId,
-      // Retrocompatibilidade caso mapeamentos legados persistam
+      // Dados de Força
       repetitions: !isCardio ? parseInt(currentInput.val2, 10) || 0 : 0,
       weightUsed: !isCardio ? parseFloat(currentInput.val1.replace(',', '.')) || 0 : 0,
-      duration: isCardio ? currentInput.val1 : "00:00:00",
       sets: !isCardio ? parseInt(currentInput.val3, 10) || 0 : 0,
+      restTime: 60, 
+      // Dados de Cardio
+      duration: isCardio ? formatTimeSpan(currentInput.val1) : "00:00:00",
+      averagePace: isCardio ? formatTimeSpan(currentInput.val1) : "00:00:00",
       frequencyCardiac: isCardio ? parseInt(currentInput.val2, 10) || 0 : 0,
       distanceCovered: isCardio ? parseFloat(currentInput.val3.replace(',', '.')) || 0 : 0,
-      averagePace: isCardio ? currentInput.val1 : "00:00:00"
+      caloriesBurned: isCardio ? 350.0 : 0.0,
+      speed: 0.0,
+      power: 0.0
     };
 
     try {
@@ -183,7 +188,7 @@ export default function App() {
 
       if (response.ok) {
         const serverData = await response.json().catch(() => null);
-        const finalId = serverData?.id || payload.id;
+        const finalId = serverData?.id || "temp-id";
         const timestamp = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         
         setRecords(prev => ({
@@ -203,11 +208,11 @@ export default function App() {
         setOpenForms(prev => ({ ...prev, [dayGuidId]: false }));
       } else {
         const errText = await response.text();
-        console.error("Payload rejeitado pelo backend:", errText);
-        alert("Erro de Validação: Verifique a formatação dos campos de envio.");
+        console.error("Validação do C# rejeitou o payload:", errText);
+        alert("Erro 400: Dados incompatíveis com as propriedades numéricas/tempo do C#.");
       }
     } catch (error) {
-      console.error("Erro na requisição POST do histórico:", error);
+      console.error("Erro na requisição POST:", error);
     }
   };
 
@@ -238,26 +243,29 @@ export default function App() {
   };
 
   // ==========================================
-  // MODIFICAÇÃO 2: ⚙️ ATUALIZAÇÃO DA ESTRUTURA (MUDADO PARA POST CONFORME PIPELINE)
+  // CORREÇÃO 2: ⚙️ ATUALIZAÇÃO DA ESTRUTURA DO DIA (MAPEADA COM CreatePlaneDayDto VIA PUT)
   // ==========================================
   const saveStructureEdition = async (dayGuidId) => {
     const edited = editFields[dayGuidId];
     if (!edited) return;
 
+    // Payload baseado estritamente na sua classe CreatePlaneDayDto
     const payload = {
-      id: dayGuidId,
-      title: edited.title,
-      timeInfo: edited.time,
+      dayIdentifier: edited.dayIdentifier || "w1_d1",
+      dayName: edited.dayName,
       tagText: edited.tagText,
-      isCardio: edited.isCardio,
+      tagColor: edited.tagColor || "bg-[#1b1e23]",
+      timeInfo: edited.time,
       bodyBatteryInstruction: edited.bodyBattery,
+      title: edited.title,
+      isCardio: edited.isCardio,
       contentRaw: edited.contentRaw
     };
 
     try {
-      // Modificado de PUT para POST baseado na rejeição de rotas identificada nos logs
+      // Como a rota pura deu erro, voltamos para o padrão RESTful 'PUT' mapeando os endpoints usuais do ASP.NET Core
       const response = await fetch(`${API_BASE_URL}/plane/days/${dayGuidId}`, {
-        method: 'POST', 
+        method: 'PUT', 
         headers: { 
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -268,21 +276,21 @@ export default function App() {
       if (response.ok) {
         applyLocalEditionUpdate(dayGuidId, edited);
       } else {
-        console.warn("POST com ID falhou. Disparando contingência na rota base limpa...");
+        console.warn("Rota com ID direta falhou. Tentando rota base sem parâmetro na URL...");
         const fallbackResponse = await fetch(`${API_BASE_URL}/plane/days`, {
-          method: 'POST',
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ ...payload, id: dayGuidId })
         });
 
         if (fallbackResponse.ok) {
           applyLocalEditionUpdate(dayGuidId, edited);
         } else {
-          alert(`Erro na sincronização: O servidor retornou status ${response.status}. Verifique as diretivas de verbos do Controller.`);
+          alert(`Erro na sincronização estrutural: O servidor retornou status ${response.status}.`);
         }
       }
     } catch (error) {
-      console.error("Erro crítico na requisição de atualização estrutural:", error);
+      console.error("Erro na requisição de atualização da estrutura:", error);
     }
   };
 
@@ -323,6 +331,8 @@ export default function App() {
       setEditFields(prev => ({
         ...prev,
         [dayId]: {
+          dayIdentifier: dayData.dayIdentifier,
+          dayName: dayData.day,
           title: dayData.title,
           time: dayData.time,
           bodyBattery: dayData.bodyBattery,
@@ -363,9 +373,9 @@ export default function App() {
         report += `• ${day.day} (${day.title})\n`;
         report += `  Status: Finalizado em ${record.timestamp}\n`;
         if (record.isCardio) {
-          report += `  Tempo/Pace: ${record.metric1 || '---'} | Ritmo/FC: ${record.metric2 || '---'} | Distância: ${record.metric3 || '---'}\n`;
+          report += `  Duração: ${record.metric1 || '---'} | Ritmo/FC: ${record.metric2 || '---'} bpm | Distância: ${record.metric3 || '---'} km\n`;
         } else {
-          report += `  Carga: ${record.metric1 || '---'} kg | Repetições/Séries: ${record.metric2 || '---'}\n`;
+          report += `  Carga: ${record.metric1 || '---'} kg | Repetições: ${record.metric2 || '---'} | Séries: ${record.metric3 || '---'}\n`;
         }
         if (record.notes) report += `  Sensações do Atleta: "${record.notes}"\n`;
         report += `-----------------------------------------------------------\n`;
@@ -565,7 +575,7 @@ export default function App() {
                     </div>
                   </>
                 ) : (
-                  /* MÓDULO ADMINISTRATIVO (POST) */
+                  /* MÓDULO ADMINISTRATIVO DE EDIÇÃO (CORRIGIDO) */
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                       <span className="text-xs font-black text-amber-400 uppercase tracking-wider">🛠️ Modificar Malha Estrutural do Dia</span>
@@ -608,7 +618,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* SESSÃO PERSISTIDA NO POSTGRESQL (DADOS ATIVOS) */}
+                {/* SESSÃO PERSISTIDA (RENDERIZAÇÃO LOCAL DINÂMICA) */}
                 {savedRecord && !isEditOpen && (
                   <div className="bg-emerald-950/40 border border-emerald-500/30 p-4 rounded-xl text-xs text-emerald-300 space-y-1 relative">
                     <div className="flex justify-between items-center text-emerald-400 font-black tracking-wider text-[10px] mb-1">
@@ -616,9 +626,9 @@ export default function App() {
                       <span className="text-zinc-500 font-mono text-[9px] mr-16">{savedRecord.timestamp}</span>
                     </div>
                     {savedRecord.isCardio ? (
-                      <p className="font-medium">Tempo/Ritmo: <span className="font-mono font-bold text-white">{savedRecord.metric1}</span> | Frequência Cardíaca: <span className="font-mono text-white">{savedRecord.metric2}</span> | Distância Concluída: <span className="text-white font-bold">{savedRecord.metric3}</span></p>
+                      <p className="font-medium">Tempo/Duração: <span className="font-mono font-bold text-white">{savedRecord.metric1}</span> | Ritmo Cardíaco: <span className="font-mono text-white">{savedRecord.metric2} bpm</span> | Distância Concluída: <span className="text-white font-bold">{savedRecord.metric3} km</span></p>
                     ) : (
-                      <p className="font-medium">Sobrecarga Aplicada: <span className="text-white font-bold">{savedRecord.metric1}</span> | Volume/Repetições: <span className="text-white">{savedRecord.metric2}</span> | Séries Totais: <span className="text-white font-bold">{savedRecord.metric3}</span></p>
+                      <p className="font-medium">Sobrecarga Aplicada: <span className="text-white font-bold">{savedRecord.metric1} kg</span> | Repetições: <span className="text-white">{savedRecord.metric2}</span> | Séries Totais: <span className="text-white font-bold">{savedRecord.metric3}</span></p>
                     )}
                     {savedRecord.notes && <p className="text-zinc-400 border-t border-zinc-800/60 pt-2 mt-2 italic">"{savedRecord.notes}"</p>}
                     <button onClick={() => handleClearRecord(dayData.id)} className="absolute top-3 right-3 text-red-400/80 hover:text-white bg-red-950/30 border border-red-900/40 px-2 py-1 rounded-lg text-[9px] font-black transition">DELETAR</button>
@@ -639,8 +649,8 @@ export default function App() {
                           {dayData.isCardio ? (
                             <>
                               <div>
-                                <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Tempo Total / Pace</label>
-                                <input type="text" placeholder="Ex: 45:12 ou 4:50/km" value={currentInput.val1} onChange={(e) => handleInputChange(dayData.id, 'val1', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
+                                <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Duração Total (Minutos ou MM:SS)</label>
+                                <input type="text" placeholder="Ex: 45 ou 45:30" value={currentInput.val1} onChange={(e) => handleInputChange(dayData.id, 'val1', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
                               </div>
                               <div>
                                 <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">FC Média (Bpm)</label>
