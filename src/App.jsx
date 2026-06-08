@@ -106,7 +106,6 @@ export default function App() {
           };
         });
 
-        // Mapeia históricos ativos baseados nas propriedades reais da sua classe C# TrainingData
         if (data.training && data.training.length > 0) {
           data.training.forEach(t => {
             const keyId = t.dayId || t.id; 
@@ -136,13 +135,12 @@ export default function App() {
   };
 
   // ==========================================
-  // CORREÇÃO 1: 💾 POST SALVAR TREINO (FORTEMENTE TIPADO COM O C#)
+  // 💾 POST SALVAR TREINO (FORTEMENTE TIPADO COM O C#)
   // ==========================================
   const handleSaveRecord = async (dayGuidId, dayName, title, isCardio) => {
     const currentInput = inputs[dayGuidId] || { val1: '', val2: '', val3: '', notes: '' };
     if (!currentInput.val1 && !currentInput.val2 && !currentInput.val3 && !currentInput.notes) return;
 
-    // Helper para converter texto simples de minutos (Ex: "45" ou "45:00") para string de TimeSpan aceita pelo C#
     const formatTimeSpan = (val) => {
       if (!val) return "00:00:00";
       if (val.includes(':')) {
@@ -155,23 +153,21 @@ export default function App() {
       return "00:00:00";
     };
 
-    // Payload estruturado exatamente igual à classe CreateTrainingDataDto / TrainingData do seu C#
+    // Alinhado com a assinatura esperada pelo DTO do backend
     const payload = {
       dateTrained: new Date().toISOString(),
       planeId: planeId,
       notes: currentInput.notes || "",
       notesOfPerformance: currentInput.notes || "",
-      // Dados de Força
       repetitions: !isCardio ? parseInt(currentInput.val2, 10) || 0 : 0,
       weightUsed: !isCardio ? parseFloat(currentInput.val1.replace(',', '.')) || 0 : 0,
       sets: !isCardio ? parseInt(currentInput.val3, 10) || 0 : 0,
       restTime: 60, 
-      // Dados de Cardio
       duration: isCardio ? formatTimeSpan(currentInput.val1) : "00:00:00",
       averagePace: isCardio ? formatTimeSpan(currentInput.val1) : "00:00:00",
       frequencyCardiac: isCardio ? parseInt(currentInput.val2, 10) || 0 : 0,
       distanceCovered: isCardio ? parseFloat(currentInput.val3.replace(',', '.')) || 0 : 0,
-      caloriesBurned: isCardio ? 350.0 : 0.0,
+      caloriesBurned: isCardio ? 300.0 : 0.0,
       speed: 0.0,
       power: 0.0
     };
@@ -209,7 +205,7 @@ export default function App() {
       } else {
         const errText = await response.text();
         console.error("Validação do C# rejeitou o payload:", errText);
-        alert("Erro 400: Dados incompatíveis com as propriedades numéricas/tempo do C#.");
+        alert("Erro 400: Erro de validação. Verifique os valores numéricos e textuais digitados.");
       }
     } catch (error) {
       console.error("Erro na requisição POST:", error);
@@ -243,13 +239,12 @@ export default function App() {
   };
 
   // ==========================================
-  // CORREÇÃO 2: ⚙️ ATUALIZAÇÃO DA ESTRUTURA DO DIA (MAPEADA COM CreatePlaneDayDto VIA PUT)
+  // ⚙️ ATUALIZAÇÃO DA ESTRUTURA (CORRIGIDO PARA PUT)
   // ==========================================
   const saveStructureEdition = async (dayGuidId) => {
     const edited = editFields[dayGuidId];
     if (!edited) return;
 
-    // Payload baseado estritamente na sua classe CreatePlaneDayDto
     const payload = {
       dayIdentifier: edited.dayIdentifier || "w1_d1",
       dayName: edited.dayName,
@@ -263,7 +258,7 @@ export default function App() {
     };
 
     try {
-      // Como a rota pura deu erro, voltamos para o padrão RESTful 'PUT' mapeando os endpoints usuais do ASP.NET Core
+      // Alterado para PUT conforme mapeamento REST do seu servidor C#
       const response = await fetch(`${API_BASE_URL}/plane/days/${dayGuidId}`, {
         method: 'PUT', 
         headers: { 
@@ -276,7 +271,7 @@ export default function App() {
       if (response.ok) {
         applyLocalEditionUpdate(dayGuidId, edited);
       } else {
-        console.warn("Rota com ID direta falhou. Tentando rota base sem parâmetro na URL...");
+        // Fallback estratégico enviando o ID no corpo do JSON
         const fallbackResponse = await fetch(`${API_BASE_URL}/plane/days`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -384,9 +379,6 @@ export default function App() {
     return report;
   };
 
-  // ==========================================
-  // RENDER INTERFACE DE LOGIN (MÓDULO DESLOGADO)
-  // ==========================================
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#0e0f11] flex items-center justify-center p-4 font-sans text-gray-200 antialiased">
@@ -447,9 +439,6 @@ export default function App() {
     );
   }
 
-  // ==========================================
-  // RENDER INTERFACE DO CORE APP (LOGADO)
-  // ==========================================
   return (
     <div className="min-h-screen bg-[#0e0f11] text-[#e4e4e7] p-4 md:p-8 flex flex-col items-center font-sans antialiased">
       <div className="w-full max-w-4xl space-y-8">
@@ -503,7 +492,7 @@ export default function App() {
 
         {/* DIRETRIZ CRÍTICA */}
         <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-2xl text-rose-300 text-xs leading-relaxed font-medium">
-          <span className="font-black uppercase text-rose-400 tracking-wider block mb-1">🚨 FOCO E ORIENTAÇÃO DO MICROCLO:</span>
+          <span className="font-black uppercase text-rose-400 tracking-wider block mb-1">🚨 FOCO E ORIENTAÇÃO DO MICROCICLO:</span>
           {currentData.alert}
         </div>
 
@@ -575,7 +564,7 @@ export default function App() {
                     </div>
                   </>
                 ) : (
-                  /* MÓDULO ADMINISTRATIVO DE EDIÇÃO (CORRIGIDO) */
+                  /* MÓDULO ADMINISTRATIVO DE EDIÇÃO (CORRIGIDO PARA PUT) */
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                       <span className="text-xs font-black text-amber-400 uppercase tracking-wider">🛠️ Modificar Malha Estrutural do Dia</span>
