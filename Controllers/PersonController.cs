@@ -5,6 +5,7 @@ using Dtos;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore; // 🔓 CORREÇÃO: Necessário para usar o .Include() e .ToListAsync()
 
 namespace Controllers
 {
@@ -30,8 +31,8 @@ namespace Controllers
                 Email = dto.Email,
                 Phone = dto.Phone,
                 DataNascimento = dto.DataNascimento,
-                Weight = (float)dto.Weight, // 👈 CORRIGIDO: Cast para float
-                Height = (float)dto.Height, // 👈 CORRIGIDO: Cast para float
+                Weight = (float)dto.Weight, 
+                Height = (float)dto.Height, 
                 EngageInPhysicalActivity = dto.EngageInPhysicalActivity,
                 PhysicalActivity = dto.PhysicalActivity,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
@@ -101,17 +102,17 @@ namespace Controllers
                             Id = Guid.NewGuid(),
                             DateTrained = trainDto.DateTrained,
                             Repetitions = trainDto.Repetitions,
-                            WeightUsed = (float)trainDto.WeightUsed, // 👈 CORRIGIDO: Cast para float
-                            Duration = string.IsNullOrEmpty(trainDto.Duration) ? TimeSpan.Zero : TimeSpan.Parse(trainDto.Duration), // 👈 CORRIGIDO: Conversão para TimeSpan
+                            WeightUsed = (float)trainDto.WeightUsed, 
+                            Duration = string.IsNullOrEmpty(trainDto.Duration) ? TimeSpan.Zero : TimeSpan.Parse(trainDto.Duration), 
                             RestTime = trainDto.RestTime,
                             Sets = trainDto.Sets,
                             Notes = trainDto.Notes,
                             FrequencyCardiac = trainDto.FrequencyCardiac,
-                            CaloriesBurned = (float)trainDto.CaloriesBurned, // 👈 CORRIGIDO: Cast para float
-                            DistanceCovered = (float)trainDto.DistanceCovered, // 👈 CORRIGIDO: Cast para float
-                            Speed = (float)trainDto.Speed, // 👈 CORRIGIDO: Cast para float
-                            Power = (float)trainDto.Power, // 👈 CORRIGIDO: Cast para float
-                            AveragePace = string.IsNullOrEmpty(trainDto.AveragePace) ? TimeSpan.Zero : TimeSpan.Parse(trainDto.AveragePace), // 👈 CORRIGIDO: Conversão para TimeSpan
+                            CaloriesBurned = (float)trainDto.CaloriesBurned, 
+                            DistanceCovered = (float)trainDto.DistanceCovered, 
+                            Speed = (float)trainDto.Speed, 
+                            Power = (float)trainDto.Power, 
+                            AveragePace = string.IsNullOrEmpty(trainDto.AveragePace) ? TimeSpan.Zero : TimeSpan.Parse(trainDto.AveragePace), 
                             NotesOfPerformance = trainDto.NotesOfPerformance
                         };
                         plane.Training.Add(training);
@@ -121,8 +122,8 @@ namespace Controllers
                 }
             }
 
-            // 3. Salva no banco de dados (Alterado de .People para .Persons)
-            _context.Persons.Add(person); // 👈 Nota: se no seu AppDbContext se chamar Usuarios ou outro nome, mude aqui.
+            // 3. Salva no banco de dados mapeado como Persons
+            _context.Persons.Add(person); 
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetById), new { id = person.Id }, person);
@@ -131,20 +132,17 @@ namespace Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(Guid id)
         {
-            var person = await _context.Persons.FindAsync(id); // 👈 Alterado para .Persons
+            var person = await _context.Persons.FindAsync(id); 
             if (person == null) return NotFound();
             return Ok(person);
         }
         
+        // 🎯 ROTA AJUSTADA: Agora aponta corretamente para .Persons
         [HttpGet("ListarTodos")]
         public async Task<IActionResult> ListarTodos()
         {
-            var usuarios = await _context.Usuarios.Include(u => u.Planes).ToListAsync();
+            var usuarios = await _context.Persons.Include(u => u.Planes).ToListAsync();
             return Ok(usuarios);
         }
-            
     }
-
-
-
 }
