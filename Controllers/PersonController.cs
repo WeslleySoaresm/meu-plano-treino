@@ -32,7 +32,7 @@ namespace Controllers
                     Name = dto.Name,
                     Email = dto.Email,
                     Phone = dto.Phone,
-                    DataNascimento = dto.DataNascimento,
+                    DataNascimento = DateTime.SpecifyKind(dto.DataNascimento, DateTimeKind.Utc),
                     Weight = (float)dto.Weight, 
                     Height = (float)dto.Height, 
                     EngageInPhysicalActivity = dto.EngageInPhysicalActivity,
