@@ -24,30 +24,31 @@ export default function App() {
   const [editFields, setEditFields] = useState({});
   const [inputs, setInputs] = useState({});
 
-  /// 🔐 FUNÇÃO DE LOGIN (Integração com a API Corrigida)
+  // 🔐 FUNÇÃO DE LOGIN ATUALIZADA (Apontando para o endpoint correto)
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!loginEmail || !loginPassword) return;
 
     setLoading(true);
     try {
-      // 🎯 ALTERADO: Mudamos de '/person' para '/usuario' que é onde o .NET listará os usuários cadastrados
-      const response = await fetch(`${API_BASE_URL}/usuario`);
+      // 🎯 Ajustado para a rota correta do PersonController
+      const response = await fetch(`${API_BASE_URL}/person/ListarTodos`);
       
       if (response.ok) {
         const users = await response.json();
-        const userFound = users.find(u => u.email.toLowerCase() === loginEmail.toLowerCase());
+        
+        // Procura o usuário correspondente ao e-mail digitado
+        const userFound = users.find(u => u.email && u.email.toLowerCase() === loginEmail.toLowerCase());
 
         if (userFound) {
           setCurrentUser(userFound);
           setIsAuthenticated(true);
           
-          // Se o usuário tem planos, carrega o primeiro plano dele
+          // Se o usuário já tiver planos vinculados, carrega o primeiro
           if (userFound.planes && userFound.planes.length > 0) {
             setPlaneId(userFound.planes[0].id);
             fetchPlaneStructure(userFound.planes[0].id);
           } else {
-            // 💡 Se der esse alerta, significa que logou, mas precisamos criar um plano para você no banco
             alert("Usuário autenticado! Porém, nenhum plano de treino foi associado a ele no banco ainda.");
           }
         } else {
@@ -64,6 +65,7 @@ export default function App() {
     }
   };
 
+  
   // 🔄 BUSCAR ESTRUTURA DO PLANO (GET)
   const fetchPlaneStructure = async (id) => {
     setLoading(true);
