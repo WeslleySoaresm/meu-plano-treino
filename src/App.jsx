@@ -236,7 +236,7 @@ export default function App() {
   };
 
   // ==========================================
-  // ⚙️ MUTABILIDADE DA MALHA METODOLÓGICA (PUT)
+  // ⚙️ MUTABILIDADE DA MALHA METODOLÓGICA (POST)
   // ==========================================
   const saveStructureEdition = async (dayGuidId) => {
     const edited = editFields[dayGuidId];
@@ -253,8 +253,9 @@ export default function App() {
     };
 
     try {
+      // Modificado para POST para contornar a ausência do PUT no pipeline do middleware .NET
       const response = await fetch(`${API_BASE_URL}/plane/days/${dayGuidId}`, {
-        method: 'PUT',
+        method: 'POST', 
         headers: { 
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -262,27 +263,25 @@ export default function App() {
         body: JSON.stringify(payload)
       });
 
-      // Aborda a rota alternativa caso o backend retorne o Erro 404
-      if (response.status === 404) {
-        const fallbackResponse = await fetch(`${API_BASE_URL}/plane/days`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        
-        if (fallbackResponse.ok) {
-          applyLocalEditionUpdate(dayGuidId, edited);
-          return;
-        }
-      }
-
       if (response.ok) {
         applyLocalEditionUpdate(dayGuidId, edited);
       } else {
-        alert("Erro interno da API ao processar atualização estrutural.");
+        // Fallback secundário na rota base sem o parâmetro limpo na URL
+        console.warn("POST com ID falhou. Tentando rota alternativa limpa...");
+        const fallbackResponse = await fetch(`${API_BASE_URL}/plane/days`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (fallbackResponse.ok) {
+          applyLocalEditionUpdate(dayGuidId, edited);
+        } else {
+          alert(`Erro na sincronização: O servidor retornou status ${response.status}. Verifique as anotações do seu Controller.`);
+        }
       }
     } catch (error) {
-      console.error("Erro na requisição PUT:", error);
+      console.error("Erro na requisição de atualização da estrutura:", error);
     }
   };
 
@@ -565,7 +564,7 @@ export default function App() {
                     </div>
                   </>
                 ) : (
-                  /* MÓDULO ADMINISTRATIVO (PUT) */
+                  /* MÓDULO ADMINISTRATIVO (MUDADO PARA OPERAR VIA POST CONFORME LOGS) */
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                       <span className="text-xs font-black text-amber-400 uppercase tracking-wider">🛠️ Modificar Malha Estrutural do Dia</span>
