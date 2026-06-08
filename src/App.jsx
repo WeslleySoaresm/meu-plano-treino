@@ -4,26 +4,28 @@ import React, { useState, useEffect } from 'react';
 const API_BASE_URL = 'https://meu-plano-treino.onrender.com/api';
 
 export default function App() {
-  // Estados de Autenticação
+  // ==========================================
+  // ESTADOS GERAIS DO COMPONENTE
+  // ==========================================
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Estados da Planilha
   const [activeWeek, setActiveWeek] = useState('semana1');
   const [planeId, setPlaneId] = useState(null); 
   const [weeksData, setWeeksData] = useState({});
   const [records, setRecords] = useState({});
   const [loading, setLoading] = useState(false);
 
-  // Estados de Controle de UI
   const [openForms, setOpenForms] = useState({});
   const [openEditForms, setOpenEditForms] = useState({});
   const [editFields, setEditFields] = useState({});
   const [inputs, setInputs] = useState({});
 
-  // 🔐 AUTENTICAÇÃO E CARREGAMENTO DE USUÁRIO
+  // ==========================================
+  // 🔐 CONTROLADOR DE AUTENTICAÇÃO (POSTGRESQL)
+  // ==========================================
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!loginEmail || !loginPassword) return;
@@ -47,20 +49,22 @@ export default function App() {
             alert("Usuário autenticado! No entanto, nenhum plano de treino está associado no banco.");
           }
         } else {
-          alert("Usuário não cadastrado. Verifique as credenciais.");
+          alert("Usuário não cadastrado ou credenciais incorretas.");
         }
       } else {
-        alert("Erro na comunicação com o servidor de banco de dados.");
+        alert("Erro de comunicação com o servidor de banco de dados.");
       }
     } catch (error) {
       console.error("Erro ao conectar ao banco:", error);
-      alert("Falha de conexão com a API.");
+      alert("Falha crítica de conexão com a API.");
     } finally {
       setLoading(false);
     }
   };
 
-  // 🔄 CARREGAR PLANILHA COMPLETA DO BANCO (GET)
+  // ==========================================
+  // 🔄 SINCRONIZADOR DA PLANILHA (GET)
+  // ==========================================
   const fetchPlaneStructure = async (id) => {
     setLoading(true);
     try {
@@ -77,9 +81,9 @@ export default function App() {
             alert: week.alert,
             footerNote: week.footerNote,
             rules: [
-              { label: "≥ 70 → Treino completo planejado", color: "bg-emerald-950/80 text-emerald-400 border border-emerald-800" },
-              { label: "50–69 → Zona 1-2, reduzir 20% do volume", color: "bg-amber-950/80 text-amber-400 border border-amber-800" },
-              { label: "< 50 → Caminhada leve + mobilidade", color: "bg-rose-950/80 text-rose-400 border border-rose-800" }
+              { label: "Secundário ≥ 70 → Treino completo planejado", color: "bg-emerald-950/80 text-emerald-400 border border-emerald-800" },
+              { label: "Mediano 50–69 → Zona 1-2, reduzir 20% do volume", color: "bg-amber-950/80 text-amber-400 border border-amber-800" },
+              { label: "Crítico < 50 → Caminhada leve + mobilidade", color: "bg-rose-950/80 text-rose-400 border border-rose-800" }
             ],
             summary: [
               { label: "Volume Total", value: "4h - 4h30", sub: "Microciclo Ajustado" },
@@ -102,16 +106,17 @@ export default function App() {
           };
         });
 
-        // Carrega históricos de treinos já gravados no banco
+        // Mapeia históricos ativos usando o dayId para indexar perfeitamente no front
         if (data.training && data.training.length > 0) {
           data.training.forEach(t => {
-            if (t.id) {
-              initialRecords[t.dayId || t.id] = {
+            const keyId = t.dayId || t.id;
+            if (keyId) {
+              initialRecords[keyId] = {
                 id: t.id,
-                isCardio: t.caloriesBurned > 0 || t.distanceCovered > 0,
+                isCardio: t.caloriesBurned > 0 || t.distanceCovered > 0 || (t.averagePace && t.averagePace !== "00:00:00"),
                 metric1: t.weightUsed > 0 ? t.weightUsed : t.averagePace,
                 metric2: t.sets > 0 ? `${t.sets} séries` : `${t.frequencyCardiac} bpm`,
-                metric3: t.notesOfPerformance,
+                metric3: t.distanceCovered > 0 ? `${t.distanceCovered} km` : t.notesOfPerformance,
                 notes: t.notes,
                 timestamp: new Date(t.dateTrained).toLocaleDateString('pt-BR')
               };
@@ -129,28 +134,37 @@ export default function App() {
     }
   };
 
-  // 💾 GRAVAR RENDIMENTO DE TREINO NO BANCO (POST)
+  // ==========================================
+  // 💾 PERSISTÊNCIA DE PRODUÇÃO DE TREINO (POST)
+  // ==========================================
   const handleSaveRecord = async (dayGuidId, dayName, title, isCardio) => {
     const currentInput = inputs[dayGuidId] || { val1: '', val2: '', val3: '', notes: '' };
     if (!currentInput.val1 && !currentInput.val2 && !currentInput.val3 && !currentInput.notes) return;
 
-    // Converte os dados do formulário nas propriedades exatas das tabelas C# do Backend
+    let generatedId = "00000000-0000-0000-0000-000000000000";
+    try {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        generatedId = crypto.randomUUID();
+      }
+    } catch (e) {}
+
+    // Tipagem estrita e sanitização para afastar o Erro 400 (Bad Request) do .NET
     const payload = {
-      id: crypto.randomUUID ? crypto.randomUUID() : "00000000-0000-0000-0000-000000000000",
+      id: generatedId,
       dateTrained: new Date().toISOString(),
-      repetitions: !isCardio ? parseInt(currentInput.val2) || 0 : 0,
-      weightUsed: !isCardio ? parseFloat(currentInput.val1) || 0 : 0,
+      repetitions: !isCardio ? parseInt(currentInput.val2, 10) || 0 : 0,
+      weightUsed: !isCardio ? parseFloat(currentInput.val1.replace(',', '.')) || 0 : 0,
       duration: isCardio ? currentInput.val1 : "00:00:00", 
-      restTime: !isCardio ? "00:01:00" : "00:00:00",
-      sets: !isCardio ? parseInt(currentInput.val3) || 4 : 0,
-      notes: currentInput.notes,
-      frequencyCardiac: isCardio ? parseInt(currentInput.val2) || 0 : 0,
-      caloriesBurned: isCardio ? 450.0 : 0.0,
-      distanceCovered: isCardio ? parseFloat(currentInput.val3) || 0 : 0,
+      restTime: "00:01:00",
+      sets: !isCardio ? parseInt(currentInput.val3, 10) || 0 : 0,
+      notes: currentInput.notes || "",
+      frequencyCardiac: isCardio ? parseInt(currentInput.val2, 10) || 0 : 0,
+      caloriesBurned: isCardio ? 100.0 : 0.0,
+      distanceCovered: isCardio ? parseFloat(currentInput.val3.replace(',', '.')) || 0 : 0,
       speed: 0,
       power: 0,
       averagePace: isCardio ? currentInput.val1 : "00:00:00",
-      notesOfPerformance: currentInput.val3,
+      notesOfPerformance: currentInput.notes || "",
       personId: currentUser.id,
       dayId: dayGuidId
     };
@@ -158,17 +172,22 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE_URL}/trainingdata/record`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify(payload)
       });
 
       if (response.ok) {
+        const serverData = await response.json().catch(() => null);
+        const finalId = serverData?.id || payload.id;
         const timestamp = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         
         setRecords(prev => ({
           ...prev,
           [dayGuidId]: {
-            id: payload.id,
+            id: finalId,
             isCardio,
             metric1: currentInput.val1,
             metric2: currentInput.val2,
@@ -180,13 +199,19 @@ export default function App() {
         
         setInputs(prev => ({ ...prev, [dayGuidId]: { val1: '', val2: '', val3: '', notes: '' } }));
         setOpenForms(prev => ({ ...prev, [dayGuidId]: false }));
+      } else {
+        const errText = await response.text();
+        console.error("Payload rejeitado pelo backend (400):", errText);
+        alert("Erro 400: Dados incompatíveis com a tabela do banco de dados C#.");
       }
     } catch (error) {
-      console.error("Erro ao gravar dados na nuvem:", error);
+      console.error("Erro na requisição POST:", error);
     }
   };
 
-  // 🗑️ APAGAR REGISTRO DE HISTÓRICO (DELETE)
+  // ==========================================
+  // 🗑️ EXPURGO DE HISTÓRICO (DELETE)
+  // ==========================================
   const handleClearRecord = async (dayGuidId) => {
     const recordToDelete = records[dayGuidId];
     if (!recordToDelete?.id) return;
@@ -210,52 +235,82 @@ export default function App() {
     }
   };
 
-  // ⚙️ SALVAR EDIÇÃO TEXTUAL DO TREINO (PUT)
+  // ==========================================
+  // ⚙️ MUTABILIDADE DA MALHA METODOLÓGICA (PUT)
+  // ==========================================
   const saveStructureEdition = async (dayGuidId) => {
     const edited = editFields[dayGuidId];
     if (!edited) return;
 
+    const payload = {
+      id: dayGuidId,
+      title: edited.title,
+      timeInfo: edited.time,
+      tagText: edited.tagText,
+      isCardio: edited.isCardio,
+      bodyBatteryInstruction: edited.bodyBattery,
+      contentRaw: edited.contentRaw
+    };
+
     try {
       const response = await fetch(`${API_BASE_URL}/plane/days/${dayGuidId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: edited.title,
-          timeInfo: edited.time,
-          tagText: edited.tagText,
-          isCardio: edited.isCardio,
-          bodyBatteryInstruction: edited.bodyBattery,
-          contentRaw: edited.contentRaw
-        })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload)
       });
 
-      if (response.ok) {
-        setWeeksData(prev => {
-          const updatedWeek = { ...prev[activeWeek] };
-          updatedWeek.days = updatedWeek.days.map(day => {
-            if (day.id === dayGuidId) {
-              return {
-                ...day,
-                title: edited.title,
-                time: edited.time,
-                bodyBattery: edited.bodyBattery,
-                isCardio: edited.isCardio,
-                tag: { ...day.tag, text: edited.tagText },
-                content: edited.contentRaw.split('\n').filter(line => line.trim() !== '')
-              };
-            }
-            return day;
-          });
-          return { ...prev, [activeWeek]: updatedWeek };
+      // Aborda a rota alternativa caso o backend retorne o Erro 404
+      if (response.status === 404) {
+        const fallbackResponse = await fetch(`${API_BASE_URL}/plane/days`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         });
-        setOpenEditForms(prev => ({ ...prev, [dayGuidId]: false }));
+        
+        if (fallbackResponse.ok) {
+          applyLocalEditionUpdate(dayGuidId, edited);
+          return;
+        }
+      }
+
+      if (response.ok) {
+        applyLocalEditionUpdate(dayGuidId, edited);
+      } else {
+        alert("Erro interno da API ao processar atualização estrutural.");
       }
     } catch (error) {
-      console.error("Erro ao salvar edição no banco de dados:", error);
+      console.error("Erro na requisição PUT:", error);
     }
   };
 
-  // Funções Utilitárias de UI
+  const applyLocalEditionUpdate = (dayGuidId, edited) => {
+    setWeeksData(prev => {
+      const updatedWeek = { ...prev[activeWeek] };
+      updatedWeek.days = updatedWeek.days.map(day => {
+        if (day.id === dayGuidId) {
+          return {
+            ...day,
+            title: edited.title,
+            time: edited.time,
+            bodyBattery: edited.bodyBattery,
+            isCardio: edited.isCardio,
+            tag: { ...day.tag, text: edited.tagText },
+            content: edited.contentRaw.split('\n').filter(line => line.trim() !== '')
+          };
+        }
+        return day;
+      });
+      return { ...prev, [activeWeek]: updatedWeek };
+    });
+    setOpenEditForms(prev => ({ ...prev, [dayGuidId]: false }));
+  };
+
+  // ==========================================
+  // UTILS & ENGENHARIA DE UI LOCAL
+  // ==========================================
   const toggleForm = (dayId) => {
     setOpenForms(prev => ({ ...prev, [dayId]: !prev[dayId] }));
     if (!inputs[dayId]) {
@@ -319,14 +374,16 @@ export default function App() {
     return report;
   };
 
-  // TELA DE AUTHENTICAÇÃO CASO DESLOGADO
+  // ==========================================
+  // RENDER INTERFACE DE LOGIN (MÓDULO DESLOGADO)
+  // ==========================================
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#0e0f11] flex items-center justify-center p-4 font-sans text-gray-200 antialiased">
         <div className="w-full max-w-md bg-[#14161a] border border-zinc-800/80 rounded-2xl p-8 shadow-2xl space-y-6 backdrop-blur-md">
           <div className="text-center space-y-2">
             <h2 className="text-3xl font-black text-white tracking-tight uppercase italic">🏃‍♂️ HighPerformance</h2>
-            <p className="text-xs text-zinc-400 font-medium uppercase tracking-wider">Acesse sua planilha integrada de 50 semanas</p>
+            <p className="text-xs text-zinc-400 font-medium uppercase tracking-wider">Planilha Esportiva de Alta Performance</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -360,7 +417,7 @@ export default function App() {
             </button>
           </form>
           <div className="text-center text-[10px] text-zinc-500 font-bold border-t border-zinc-800/80 pt-4 uppercase tracking-wider">
-            Conexão TLS ativa e persistida no PostgreSQL.
+            Conexão SSL Segura persistida via API.
           </div>
         </div>
       </div>
@@ -380,11 +437,14 @@ export default function App() {
     );
   }
 
+  // ==========================================
+  // RENDER INTERFACE DO CORE APP (LOGADO)
+  // ==========================================
   return (
     <div className="min-h-screen bg-[#0e0f11] text-[#e4e4e7] p-4 md:p-8 flex flex-col items-center font-sans antialiased">
       <div className="w-full max-w-4xl space-y-8">
         
-        {/* HEADER DE USUÁRIO LOGADO - PREMIUM */}
+        {/* HEADER DO ATLETA */}
         <div className="flex justify-between items-center bg-[#14161a] border border-zinc-800/80 p-4 rounded-2xl shadow-xl backdrop-blur-md">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 bg-lime-400/15 border border-lime-400/40 rounded-xl flex items-center justify-center font-black text-lime-400 text-base shadow-inner">
@@ -392,15 +452,15 @@ export default function App() {
             </div>
             <div>
               <h4 className="text-sm font-black text-white tracking-wide uppercase">{currentUser?.name}</h4>
-              <p className="text-[11px] text-zinc-400 font-mono">PLANO ATIVO: <span className="text-lime-400 font-bold">{planeId?.substring(0,8)}...</span></p>
+              <p className="text-[11px] text-zinc-400 font-mono">ID DO PLANO: <span className="text-lime-400 font-bold">{planeId?.substring(0,8)}...</span></p>
             </div>
           </div>
           <button onClick={() => window.location.reload()} className="text-xs font-bold text-zinc-400 hover:text-white border border-zinc-700 bg-zinc-800/40 px-3 py-2 rounded-xl transition">Sair</button>
         </div>
         
-        {/* SELETOR DE ABAS DAS 50 SEMANAS EM GRADE ESPORTIVA */}
+        {/* SELETOR GRID MACROCICLO */}
         <div className="space-y-3 bg-[#14161a] p-4 rounded-2xl border border-zinc-800/80 shadow-lg">
-          <label className="text-[11px] font-black uppercase tracking-wider text-zinc-400 block">Linha do Tempo — Macrociclo de 50 Semanas</label>
+          <label className="text-[11px] font-black uppercase tracking-wider text-zinc-400 block">Linha do Tempo — Linha de Evolução do Plano</label>
           <div className="flex flex-wrap gap-1.5 p-1 max-h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700">
             {Array.from({ length: 50 }, (_, i) => i + 1).map((num) => (
               <button
@@ -414,7 +474,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* TÍTULO DA SEMANA */}
+        {/* TÍTULO PRINCIPAL & EMISSÃO DE RELATÓRIO */}
         <div className="border-b border-zinc-800/80 pb-3 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white uppercase italic">
             ⚡ {currentData.title}
@@ -423,7 +483,7 @@ export default function App() {
             onClick={() => {
               const text = generateWeeklyReport();
               navigator.clipboard.writeText(text);
-              alert("Relatório completo copiado para a Área de Transferência!");
+              alert("Relatório semanal copiado para a área de transferência!");
             }}
             className="bg-lime-400 hover:bg-lime-300 text-black text-xs font-black px-4 py-2.5 rounded-xl transition uppercase tracking-wider flex items-center gap-2 self-start md:self-auto"
           >
@@ -431,15 +491,15 @@ export default function App() {
           </button>
         </div>
 
-        {/* ORIENTAÇÃO CRÍTICA */}
+        {/* DIRETRIZ CRÍTICA */}
         <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-2xl text-rose-300 text-xs leading-relaxed font-medium">
-          <span className="font-black uppercase text-rose-400 tracking-wider block mb-1">🚨 FOCO CRÍTICO DO TREINADOR:</span>
+          <span className="font-black uppercase text-rose-400 tracking-wider block mb-1">🚨 FOCO E ORIENTAÇÃO DO MICROCLO:</span>
           {currentData.alert}
         </div>
 
-        {/* SEMÁFORO BODY BATTERY */}
+        {/* REGRAS DO SEMÁFORO DIÁRIO */}
         <div className="space-y-3 bg-[#14161a] p-4 rounded-2xl border border-zinc-800/80 shadow-md">
-          <h3 className="text-[11px] font-black uppercase tracking-wider text-zinc-400">Regra de Segurança Diária (Score Garmin/Polar)</h3>
+          <h3 className="text-[11px] font-black uppercase tracking-wider text-zinc-400">Semáforo de Carga Diária (Score de Recuperação Coletado)</h3>
           <div className="flex flex-col sm:flex-row gap-2 text-[11px] font-bold">
             {currentData.rules.map((rule, idx) => (
               <span key={idx} className={`px-3 py-2 rounded-xl text-center flex-1 transition ${rule.color}`}>
@@ -449,7 +509,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* REGRADROS DE METAS (MICROCICLO) */}
+        {/* MÓDULOS DE METAS DE PERFORMANCE */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
           {currentData.summary.map((item, idx) => (
             <div key={idx} className="bg-[#14161a] border border-zinc-800/80 p-3.5 rounded-2xl flex flex-col justify-between shadow-md hover:border-zinc-700 transition">
@@ -460,7 +520,7 @@ export default function App() {
           ))}
         </div>
 
-        {/* LISTAGEM DOS CARDS DE TREINOS DIÁRIOS */}
+        {/* CARDS DINÂMICOS DOS DIAS DE TREINO */}
         <div className="space-y-5">
           {currentData.days.map((dayData) => {
             const currentInput = inputs[dayData.id] || { val1: '', val2: '', val3: '', notes: '' };
@@ -489,7 +549,7 @@ export default function App() {
                     </div>
 
                     <div className="bg-[#1b1e23] border border-zinc-800/60 p-3 rounded-xl text-xs text-zinc-300 flex items-start gap-2 italic">
-                      <span className="text-amber-400 font-bold">⚡ Instrução Metrológica:</span>
+                      <span className="text-amber-400 font-bold">⚡ Prescrição Metrológica:</span>
                       <p className="font-medium text-zinc-400">{dayData.bodyBattery}</p>
                     </div>
 
@@ -505,7 +565,7 @@ export default function App() {
                     </div>
                   </>
                 ) : (
-                  /* CONTAINER DE EDIÇÃO PUT */
+                  /* MÓDULO ADMINISTRATIVO (PUT) */
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                       <span className="text-xs font-black text-amber-400 uppercase tracking-wider">🛠️ Modificar Malha Estrutural do Dia</span>
@@ -522,15 +582,23 @@ export default function App() {
                         <input type="text" value={currentEdit?.time || ''} onChange={(e) => handleEditFieldChange(dayData.id, 'time', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 transition" />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-zinc-400 mb-1 font-bold uppercase tracking-wider">Filtro de Tag</label>
+                        <label className="block text-[10px] text-zinc-400 mb-1 font-bold uppercase tracking-wider">Texto de Tag</label>
                         <input type="text" value={currentEdit?.tagText || ''} onChange={(e) => handleEditFieldChange(dayData.id, 'tagText', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 transition" />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-zinc-400 mb-1 font-bold uppercase tracking-wider">Formulário Relacional</label>
+                        <label className="block text-[10px] text-zinc-400 mb-1 font-bold uppercase tracking-wider">Mapeador de Rendimento</label>
                         <select value={currentEdit?.isCardio ? "true" : "false"} onChange={(e) => handleEditFieldChange(dayData.id, 'isCardio', e.target.value === "true")} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 transition">
                           <option value="true">Cardio/Corrida</option>
                           <option value="false">Força/Hipertrofia</option>
                         </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] text-zinc-400 mb-1 font-bold uppercase tracking-wider">Instrução Body Battery</label>
+                        <input type="text" value={currentEdit?.bodyBattery || ''} onChange={(e) => handleEditFieldChange(dayData.id, 'bodyBattery', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 transition" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] text-zinc-400 mb-1 font-bold uppercase tracking-wider">Instruções de Exercícios (Linha por linha)</label>
+                        <textarea rows="4" value={currentEdit?.contentRaw || ''} onChange={(e) => handleEditFieldChange(dayData.id, 'contentRaw', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-amber-400 transition" />
                       </div>
                     </div>
                     <div className="flex justify-end gap-2 pt-2">
@@ -540,24 +608,24 @@ export default function App() {
                   </div>
                 )}
 
-                {/* HISTÓRICO PERSISTIDO NO POSTGRESQL */}
+                {/* SESSÃO PERSISTIDA NO POSTGRESQL (DADOS ATIVOS) */}
                 {savedRecord && !isEditOpen && (
                   <div className="bg-emerald-950/40 border border-emerald-500/30 p-4 rounded-xl text-xs text-emerald-300 space-y-1 relative">
                     <div className="flex justify-between items-center text-emerald-400 font-black tracking-wider text-[10px] mb-1">
-                      <span>💾 HISTÓRICO DE PRODUTIVIDADE ATIVO (POSTGRESQL)</span>
+                      <span>💾 RENDIMENTO SALVO E PRESENTE NO CLOUD REPOSITÓRIO</span>
                       <span className="text-zinc-500 font-mono text-[9px] mr-16">{savedRecord.timestamp}</span>
                     </div>
                     {savedRecord.isCardio ? (
-                      <p className="font-medium">Tempo/Ritmo: <span className="font-mono font-bold text-white">{savedRecord.metric1}</span> | FC Média: <span className="font-mono text-white">{savedRecord.metric2}</span> | Distância Alvo: <span className="text-white font-bold">{savedRecord.metric3}</span></p>
+                      <p className="font-medium">Tempo/Ritmo: <span className="font-mono font-bold text-white">{savedRecord.metric1}</span> | Frequência Cardíaca: <span className="font-mono text-white">{savedRecord.metric2}</span> | Distância Concluída: <span className="text-white font-bold">{savedRecord.metric3}</span></p>
                     ) : (
-                      <p className="font-medium">Sobrecarga: <span className="text-white font-bold">{savedRecord.metric1} kg</span> | Volume Realizado: <span className="text-white">{savedRecord.metric2}</span></p>
+                      <p className="font-medium">Sobrecarga Aplicada: <span className="text-white font-bold">{savedRecord.metric1} kg</span> | Volume/Repetições: <span className="text-white">{savedRecord.metric2}</span> | Séries Totais: <span className="text-white font-bold">{savedRecord.metric3}</span></p>
                     )}
                     {savedRecord.notes && <p className="text-zinc-400 border-t border-zinc-800/60 pt-2 mt-2 italic">"{savedRecord.notes}"</p>}
                     <button onClick={() => handleClearRecord(dayData.id)} className="absolute top-3 right-3 text-red-400/80 hover:text-white bg-red-950/30 border border-red-900/40 px-2 py-1 rounded-lg text-[9px] font-black transition">DELETAR</button>
                   </div>
                 )}
 
-                {/* BOTÃO E FORMULÁRIO DE CAPTURA POST */}
+                {/* PAINEL DE ENTRADA DO FORMULÁRIO (POST) */}
                 {!savedRecord && !isEditOpen && (
                   <div className="pt-2">
                     {!isFormOpen ? (
@@ -576,31 +644,31 @@ export default function App() {
                               </div>
                               <div>
                                 <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">FC Média (Bpm)</label>
-                                <input type="text" placeholder="Ex: 142 bpm" value={currentInput.val2} onChange={(e) => handleInputChange(dayData.id, 'val2', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
+                                <input type="text" placeholder="Ex: 142" value={currentInput.val2} onChange={(e) => handleInputChange(dayData.id, 'val2', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
                               </div>
                               <div>
                                 <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Distância Total (Km)</label>
-                                <input type="text" placeholder="Ex: 8.5 km" value={currentInput.val3} onChange={(e) => handleInputChange(dayData.id, 'val3', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
+                                <input type="text" placeholder="Ex: 8.5" value={currentInput.val3} onChange={(e) => handleInputChange(dayData.id, 'val3', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
                               </div>
                             </>
                           ) : (
                             <>
                               <div>
-                                <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Carga Máxima (Kg)</label>
-                                <input type="text" placeholder="Ex: 80 kg" value={currentInput.val1} onChange={(e) => handleInputChange(dayData.id, 'val1', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
+                                <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Carga Geral (Kg)</label>
+                                <input type="text" placeholder="Ex: 80" value={currentInput.val1} onChange={(e) => handleInputChange(dayData.id, 'val1', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
                               </div>
                               <div>
-                                <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Repetições Alvo</label>
-                                <input type="text" placeholder="Ex: 12 repetições" value={currentInput.val2} onChange={(e) => handleInputChange(dayData.id, 'val2', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
+                                <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Repetições Reais</label>
+                                <input type="text" placeholder="Ex: 12" value={currentInput.val2} onChange={(e) => handleInputChange(dayData.id, 'val2', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
                               </div>
                               <div>
-                                <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Séries Executadas</label>
-                                <input type="text" placeholder="Ex: 4 séries" value={currentInput.val3} onChange={(e) => handleInputChange(dayData.id, 'val3', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
+                                <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Séries Feitas</label>
+                                <input type="text" placeholder="Ex: 4" value={currentInput.val3} onChange={(e) => handleInputChange(dayData.id, 'val3', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
                               </div>
                             </>
                           )}
                           <div className="sm:col-span-3">
-                            <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Percepção de Esforço / Notas do Treino</label>
+                            <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Percepção de Esforço / Notas Fisiológicas</label>
                             <input type="text" placeholder="Ex: Cansaço alto no final, pernas pesadas" value={currentInput.notes} onChange={(e) => handleInputChange(dayData.id, 'notes', e.target.value)} className="w-full bg-[#0e0f11] border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
                           </div>
                         </div>
@@ -617,7 +685,7 @@ export default function App() {
           })}
         </div>
 
-        {/* NOTA DE RODAPÉ DA SEMANA */}
+        {/* NOTA METODOLÓGICA DE RODAPÉ */}
         <div className="bg-[#14161a] border border-zinc-800 p-4 rounded-2xl text-center text-xs font-medium text-zinc-500 shadow-md">
           💡 <span className="italic">{currentData.footerNote}</span>
         </div>
